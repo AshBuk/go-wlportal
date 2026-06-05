@@ -120,13 +120,29 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 		}
 	}
 
-	if _, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []interface{} {
-		return []interface{}{s.handle, toPortal(list), "", map[string]dbus.Variant{
+	// GlobalShortcuts has no restore_token; the portal persists bindings per
+	// application. After CreateSession, ListShortcuts silently (no dialog)
+	// returns the shortcuts bound in a previous run. Bind only when a requested
+	// shortcut is missing, so a returning app is not prompted again — while a
+	// new build that added a shortcut still triggers a (necessary) bind.
+	listed, err := conn.Request(portalShortcuts, "ListShortcuts", func(token string) []interface{} {
+		return []interface{}{s.handle, map[string]dbus.Variant{
 			"handle_token": dbus.MakeVariant(token),
 		}}
-	}); err != nil {
+	})
+	if err != nil {
 		_ = conn.Close()
 		return nil, err
+	}
+	if !allBound(listed, list) {
+		if _, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []interface{} {
+			return []interface{}{s.handle, toPortal(list), "", map[string]dbus.Variant{
+				"handle_token": dbus.MakeVariant(token),
+			}}
+		}); err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
 	}
 
 	s.wg.Add(1)
@@ -179,6 +195,41 @@ func (s *Session) listen() {
 			return
 		}
 	}
+}
+
+// boundIDs extracts the shortcut IDs from a ListShortcuts/BindShortcuts
+// response, whose "shortcuts" field is an a(sa{sv}) array of (id, metadata).
+func boundIDs(results map[string]dbus.Variant) map[string]bool {
+	ids := map[string]bool{}
+	v, ok := results["shortcuts"]
+	if !ok {
+		return ids
+	}
+	entries, ok := v.Value().([][]interface{})
+	if !ok {
+		return ids
+	}
+	for _, e := range entries {
+		if len(e) > 0 {
+			if id, ok := e[0].(string); ok && id != "" {
+				ids[id] = true
+			}
+		}
+	}
+	return ids
+}
+
+// allBound reports whether every requested shortcut is already bound according
+// to the portal's response, meaning no BindShortcuts call (and consent dialog)
+// is needed.
+func allBound(results map[string]dbus.Variant, want []Shortcut) bool {
+	have := boundIDs(results)
+	for _, sc := range want {
+		if !have[sc.ID] {
+			return false
+		}
+	}
+	return true
 }
 
 func toPortal(list []Shortcut) []portalShortcut {
