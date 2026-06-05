@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/AshBuk/go-wlportal/remotedesktop"
+	"github.com/AshBuk/go-wlportal/typing"
 )
 
 func main() {
@@ -21,7 +21,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: wlportal-type <text>")
 		os.Exit(2)
 	}
-	if !remotedesktop.Available() {
+	if !typing.Available() {
 		fmt.Fprintln(os.Stderr, "RemoteDesktop portal not available on this session")
 		os.Exit(1)
 	}
@@ -31,7 +31,7 @@ func main() {
 		tokenPath = filepath.Join(dir, "wlportal-type", "token")
 	}
 
-	kbd, err := remotedesktop.NewKeyboard(remotedesktop.WithRestoreTokenPath(tokenPath))
+	kbd, err := typing.NewKeyboard(typing.WithRestoreTokenPath(tokenPath))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

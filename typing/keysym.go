@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Asher Buk
 // SPDX-License-Identifier: MIT
 
-package remotedesktop
+package typing
 
 // Common control keysyms (X11 keysymdef).
 const (
