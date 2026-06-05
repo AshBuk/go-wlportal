@@ -12,6 +12,8 @@ Wayland security-context that blocks `zwp_virtual_keyboard` for sandboxed
 clients (which is what breaks `wtype` in a sandbox).
 
 > Only dependency: [`github.com/godbus/dbus/v5`](https://github.com/godbus/dbus).
+>
+> Extracted from and used by [dabri](https://github.com/AshBuk/dabri).
 
 ## Install
 
