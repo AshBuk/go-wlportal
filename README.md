@@ -3,13 +3,16 @@
 Small, dependency-light Go bindings for XDG desktop portals that have no good
 pure-Go equivalent yet.
 
-- **`remotedesktop`** — inject keyboard input into the focused window via the
+- **`typing`** — inject keyboard input into the focused window via the
   `org.freedesktop.portal.RemoteDesktop` portal.
+- **`shortcuts`** — register global hotkeys and receive their activations via the
+  `org.freedesktop.portal.GlobalShortcuts` portal.
 
-The injection happens on the **compositor side**, so it works from inside a
-**Flatpak sandbox without extra device permissions** and is not affected by the
-Wayland security-context that blocks `zwp_virtual_keyboard` for sandboxed
-clients (which is what breaks `wtype` in a sandbox).
+Both work on the **compositor side**, so they run from inside a **Flatpak sandbox
+without extra device permissions** and are not affected by the Wayland
+security-context that blocks `zwp_virtual_keyboard` for sandboxed clients (which
+is what breaks `wtype` in a sandbox). The packages are independent — import only
+what you need.
 
 > Only dependency: [`github.com/godbus/dbus/v5`](https://github.com/godbus/dbus).
 >
@@ -29,17 +32,17 @@ package main
 import (
 	"log"
 
-	"github.com/AshBuk/go-wlportal/remotedesktop"
+	"github.com/AshBuk/go-wlportal/typing"
 )
 
 func main() {
-	if !remotedesktop.Available() {
+	if !typing.Available() {
 		log.Fatal("RemoteDesktop portal not available")
 	}
 
-	kbd, err := remotedesktop.NewKeyboard(
+	kbd, err := typing.NewKeyboard(
 		// Persist the permission so the consent dialog shows only once.
-		remotedesktop.WithRestoreTokenPath("/home/me/.config/myapp/portal.token"),
+		typing.WithRestoreTokenPath("/home/me/.config/myapp/portal.token"),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -58,7 +61,33 @@ A ready-to-run CLI lives in [`examples/type`](examples/type):
 go run ./examples/type "hello, world"
 ```
 
-## API
+### Global shortcuts
+
+```go
+import "github.com/AshBuk/go-wlportal/shortcuts"
+
+s, err := shortcuts.New([]shortcuts.Shortcut{
+	{ID: "record", Description: "Start recording", PreferredTrigger: "<Ctrl><Alt>space"},
+})
+if err != nil {
+	log.Fatal(err)
+}
+defer s.Close()
+
+for e := range s.Events() {
+	if e.Pressed {
+		log.Printf("activated: %s", e.ID)
+	}
+}
+```
+
+A ready-to-run CLI lives in [`examples/shortcuts`](examples/shortcuts):
+
+```bash
+go run ./examples/shortcuts
+```
+
+## API (`typing`)
 
 ```go
 func Available() bool
@@ -79,6 +108,27 @@ func RuneToKeysym(r rune) int32
   across restarts.
 - `Type` maps Latin-1 runes 1:1 and other code points to the Unicode keysym
   range, so non-ASCII text works where the compositor supports it.
+
+## API (`shortcuts`)
+
+```go
+func Available() bool
+
+func New(list []Shortcut, opts ...Option) (*Session, error)
+func WithCallTimeout(d time.Duration) Option
+
+func (s *Session) Events() <-chan Event // closed on Close
+func (s *Session) Close() error
+
+type Shortcut struct{ ID, Description, PreferredTrigger string }
+type Event struct{ ID string; Pressed bool }
+```
+
+- `New` opens the session and binds all shortcuts in one request (one consent
+  dialog), then delivers `Activated`/`Deactivated` as `Event`s on `Events()`.
+- `PreferredTrigger` is a portal accelerator string (e.g. `<Ctrl><Alt>space`);
+  empty lets the user choose the binding. Converting an app-specific hotkey
+  format into this syntax is the caller's responsibility.
 
 ## Keyboard layout limitation
 
@@ -102,14 +152,14 @@ layout, fall back to the clipboard (this is what `dabri` does).
 
 ## Compositor support
 
-| Compositor | RemoteDesktop keyboard |
-|------------|------------------------|
-| GNOME      | ✅ |
-| KDE Plasma | ✅ |
-| wlroots / Hyprland / Sway | ❌ (portal does not implement RemoteDesktop) |
+| Compositor | `typing` (RemoteDesktop) | `shortcuts` (GlobalShortcuts) |
+|------------|--------------------------|-------------------------------|
+| GNOME      | ✅ | ✅ |
+| KDE Plasma | ✅ | ✅ |
+| wlroots / Hyprland / Sway | ❌ (portal does not implement RemoteDesktop) | ⚠️ registers, but the binding must be set in the compositor config |
 
-Always check `Available()` and fall back to another method (e.g. `ydotool`,
-`wtype`, or clipboard) when it returns `false`.
+Always check `Available()` for the package you use and fall back to another
+method when it returns `false`.
 
 ## License
 
