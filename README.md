@@ -144,11 +144,31 @@ layout, fall back to the clipboard (this is what `dabri` does).
 
 ## Roadmap
 
-- **libei (EIS)** path for fuller multilingual coverage. Tracked but uncertain:
-  it requires the `libei` C library (CGO) and the client still typically uses the
-  compositor-provided keymap, so it does not automatically solve arbitrary-Unicode
-  injection. Until then, clipboard remains the recommended fallback for non-layout
-  characters.
+**libei (EIS) — evaluated, deliberately not pursued.** We looked into routing
+keyboard input through `libei` (via the portal's `ConnectToEIS`) for fuller
+multilingual coverage and decided against it. The reasoning:
+
+- It would **not** solve arbitrary-Unicode injection anyway. libei is
+  keycode-only (no keysym event) and does **not** let the client upload its own
+  keymap — the keymap comes from the compositor, as for any Wayland client. The
+  only protocol that uploads a client keymap is `zwp_virtual_keyboard` (what
+  `wtype` uses), which is precisely the sandbox-blocked, GNOME-unsupported path
+  this library exists to avoid.
+- Its real benefit is narrow: `ConnectToEIS` can fetch the active keymap
+  (`ei_device_keyboard_get_keymap`), enabling layout-aware reverse mapping —
+  reaching characters in *already-installed* layouts and making the clipboard
+  fallback boundary precise. It still can't type emoji, unmapped scripts, or
+  arbitrary Unicode.
+- The cost is high: CGO for both `libei` and `libxkbcommon`. That negates the
+  whole point of this library — one dependency, pure-Go, Flatpak-friendly.
+- For the typical workload (whole sentences in arbitrary languages), the
+  **clipboard is the correct primary path regardless** of libei, and that
+  belongs in the application layer, not in a portal binding.
+
+So multilingual text outside the active layout is handled by clipboard fallback
+in the consuming app (this is what `dabri` does). If a layout-aware EIS typer is
+ever wanted, it should live in a separate optional module — never in this core
+package — to keep the zero-CGO story intact.
 
 ## Compositor support
 
