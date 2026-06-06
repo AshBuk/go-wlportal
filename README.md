@@ -1,5 +1,9 @@
 # go-wlportal
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/AshBuk/go-wlportal.svg)](https://pkg.go.dev/github.com/AshBuk/go-wlportal)
+[![Go Report Card](https://goreportcard.com/badge/github.com/AshBuk/go-wlportal)](https://goreportcard.com/report/github.com/AshBuk/go-wlportal)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Small, dependency-light Go bindings for XDG desktop portals that have no good
 pure-Go equivalent yet.
 
