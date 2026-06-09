@@ -43,8 +43,9 @@ func Available() bool {
 type Option func(*config)
 
 type config struct {
-	timeout time.Duration
-	appID   string
+	timeout   time.Duration
+	appID     string
+	forceBind bool
 }
 
 // WithCallTimeout sets how long to wait for each portal call to be answered.
@@ -58,6 +59,14 @@ func WithCallTimeout(d time.Duration) Option {
 // apps must set it; it should match an installed .desktop file.
 func WithAppID(id string) Option {
 	return func(c *config) { c.appID = id }
+}
+
+// WithForceBind always calls BindShortcuts, showing the compositor's shortcut
+// dialog even when every shortcut is already bound. Use it for an explicit
+// "reconfigure shortcuts" action; normal startup should omit it to avoid
+// re-prompting a returning app.
+func WithForceBind() Option {
+	return func(c *config) { c.forceBind = true }
 }
 
 // Session is an open GlobalShortcuts portal session. Activations are delivered
@@ -148,7 +157,7 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 		_ = conn.Close()
 		return nil, err
 	}
-	if !allBound(listed, list) {
+	if cfg.forceBind || !allBound(listed, list) {
 		if _, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []any {
 			return []any{s.handle, toPortal(list), "", map[string]dbus.Variant{
 				"handle_token": dbus.MakeVariant(token),
