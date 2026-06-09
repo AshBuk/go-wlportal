@@ -8,6 +8,7 @@ package portal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,7 +25,8 @@ const (
 	// Path is the object path of the XDG desktop portal.
 	Path = "/org/freedesktop/portal/desktop"
 
-	requestIface = "org.freedesktop.portal.Request"
+	requestIface  = "org.freedesktop.portal.Request"
+	registryIface = "org.freedesktop.host.portal.Registry"
 )
 
 var requestSeq uint64
@@ -60,8 +62,47 @@ func (c *Conn) Close() error {
 
 // Call invokes a method on the portal desktop object without waiting for a
 // Request/Response round-trip (e.g. RemoteDesktop.NotifyKeyboardKeysym).
-func (c *Conn) Call(iface, method string, args ...interface{}) *dbus.Call {
+func (c *Conn) Call(iface, method string, args ...any) *dbus.Call {
 	return c.conn.Object(Dest, Path).Call(iface+"."+method, 0, args...)
+}
+
+// Register declares the app id to the portal so non-sandboxed apps are
+// identified before opening a session. GNOME's GlobalShortcuts backend rejects
+// an unidentified app, and consent dialogs use the id to resolve the app's
+// .desktop name and icon. No-op when appID is empty or the host Registry
+// interface is missing (older xdg-desktop-portal).
+func (c *Conn) Register(appID string) error {
+	if appID == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+	err := c.conn.Object(Dest, Path).
+		CallWithContext(ctx, registryIface+".Register", 0, appID, map[string]dbus.Variant{}).
+		Err
+	if isUnsupported(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("portal: register app id: %w", err)
+	}
+	return nil
+}
+
+// isUnsupported reports whether err means the portal lacks the Registry interface.
+func isUnsupported(err error) bool {
+	var derr dbus.Error
+	if !errors.As(err, &derr) {
+		return false
+	}
+	switch derr.Name {
+	case "org.freedesktop.DBus.Error.UnknownMethod",
+		"org.freedesktop.DBus.Error.UnknownInterface",
+		"org.freedesktop.DBus.Error.UnknownObject",
+		"org.freedesktop.DBus.Error.NotSupported":
+		return true
+	}
+	return false
 }
 
 // Signals returns the channel receiving every signal on this connection. After
@@ -96,7 +137,7 @@ func HasInterface(name string) bool {
 // Request invokes iface.method on the portal and blocks until the matching
 // org.freedesktop.portal.Request.Response signal arrives. build receives a
 // unique handle_token and returns the call arguments.
-func (c *Conn) Request(iface, method string, build func(token string) []interface{}) (map[string]dbus.Variant, error) {
+func (c *Conn) Request(iface, method string, build func(token string) []any) (map[string]dbus.Variant, error) {
 	token := fmt.Sprintf("wlportal%d", atomic.AddUint64(&requestSeq, 1))
 	sender := strings.ReplaceAll(strings.TrimPrefix(c.conn.Names()[0], ":"), ".", "_")
 	reqPath := dbus.ObjectPath(Path + "/request/" + sender + "/" + token)

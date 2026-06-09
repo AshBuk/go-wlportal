@@ -44,12 +44,20 @@ type Option func(*config)
 
 type config struct {
 	timeout time.Duration
+	appID   string
 }
 
 // WithCallTimeout sets how long to wait for each portal call to be answered.
 // The default is 60s, which covers the user interacting with the consent dialog.
 func WithCallTimeout(d time.Duration) Option {
 	return func(c *config) { c.timeout = d }
+}
+
+// WithAppID sets the app id declared to the portal before the session is created.
+// GNOME's GlobalShortcuts backend rejects an unidentified app, so non-sandboxed
+// apps must set it; it should match an installed .desktop file.
+func WithAppID(id string) Option {
+	return func(c *config) { c.appID = id }
 }
 
 // Session is an open GlobalShortcuts portal session. Activations are delivered
@@ -91,8 +99,14 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 	}
 	s := &Session{conn: conn, events: make(chan Event, 8), done: make(chan struct{})}
 
-	created, err := conn.Request(portalShortcuts, "CreateSession", func(token string) []interface{} {
-		return []interface{}{map[string]dbus.Variant{
+	// Declare the app identity before CreateSession; GNOME's backend requires it.
+	if err := conn.Register(cfg.appID); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+
+	created, err := conn.Request(portalShortcuts, "CreateSession", func(token string) []any {
+		return []any{map[string]dbus.Variant{
 			"handle_token":         dbus.MakeVariant(token),
 			"session_handle_token": dbus.MakeVariant(token),
 		}}
@@ -125,8 +139,8 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 	// returns the shortcuts bound in a previous run. Bind only when a requested
 	// shortcut is missing, so a returning app is not prompted again — while a
 	// new build that added a shortcut still triggers a (necessary) bind.
-	listed, err := conn.Request(portalShortcuts, "ListShortcuts", func(token string) []interface{} {
-		return []interface{}{s.handle, map[string]dbus.Variant{
+	listed, err := conn.Request(portalShortcuts, "ListShortcuts", func(token string) []any {
+		return []any{s.handle, map[string]dbus.Variant{
 			"handle_token": dbus.MakeVariant(token),
 		}}
 	})
@@ -135,8 +149,8 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 		return nil, err
 	}
 	if !allBound(listed, list) {
-		if _, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []interface{} {
-			return []interface{}{s.handle, toPortal(list), "", map[string]dbus.Variant{
+		if _, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []any {
+			return []any{s.handle, toPortal(list), "", map[string]dbus.Variant{
 				"handle_token": dbus.MakeVariant(token),
 			}}
 		}); err != nil {
@@ -205,7 +219,7 @@ func boundIDs(results map[string]dbus.Variant) map[string]bool {
 	if !ok {
 		return ids
 	}
-	entries, ok := v.Value().([][]interface{})
+	entries, ok := v.Value().([][]any)
 	if !ok {
 		return ids
 	}

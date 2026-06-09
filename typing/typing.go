@@ -63,12 +63,20 @@ func WithCallTimeout(d time.Duration) Option {
 	return func(k *Keyboard) { k.timeout = d }
 }
 
+// WithAppID sets the app id declared to the portal before the session is created,
+// so the consent dialog shows the app's name and icon. It should match an
+// installed .desktop file.
+func WithAppID(id string) Option {
+	return func(k *Keyboard) { k.appID = id }
+}
+
 // Keyboard injects keyboard input through the RemoteDesktop portal. It is safe
 // for concurrent use; calls are serialized. The portal session is opened lazily
 // on first use, which may show a one-time permission dialog.
 type Keyboard struct {
 	tokenPath string
 	timeout   time.Duration
+	appID     string
 
 	mu      sync.Mutex
 	conn    *portal.Conn
@@ -151,8 +159,13 @@ func (k *Keyboard) ensureSession() error {
 	}
 	k.conn = conn
 
-	created, err := k.conn.Request(portalRemote, "CreateSession", func(token string) []interface{} {
-		return []interface{}{map[string]dbus.Variant{
+	// Declare the app id before CreateSession so the dialog can resolve the app.
+	if err := k.conn.Register(k.appID); err != nil {
+		return err
+	}
+
+	created, err := k.conn.Request(portalRemote, "CreateSession", func(token string) []any {
+		return []any{map[string]dbus.Variant{
 			"handle_token":         dbus.MakeVariant(token),
 			"session_handle_token": dbus.MakeVariant(token),
 		}}
@@ -166,7 +179,7 @@ func (k *Keyboard) ensureSession() error {
 	}
 	session := dbus.ObjectPath(handle)
 
-	if _, err := k.conn.Request(portalRemote, "SelectDevices", func(token string) []interface{} {
+	if _, err := k.conn.Request(portalRemote, "SelectDevices", func(token string) []any {
 		opts := map[string]dbus.Variant{
 			"handle_token": dbus.MakeVariant(token),
 			"types":        dbus.MakeVariant(deviceKeyboard),
@@ -177,13 +190,13 @@ func (k *Keyboard) ensureSession() error {
 				opts["restore_token"] = dbus.MakeVariant(t)
 			}
 		}
-		return []interface{}{session, opts}
+		return []any{session, opts}
 	}); err != nil {
 		return err
 	}
 
-	started, err := k.conn.Request(portalRemote, "Start", func(token string) []interface{} {
-		return []interface{}{session, "", map[string]dbus.Variant{
+	started, err := k.conn.Request(portalRemote, "Start", func(token string) []any {
+		return []any{session, "", map[string]dbus.Variant{
 			"handle_token": dbus.MakeVariant(token),
 		}}
 	})

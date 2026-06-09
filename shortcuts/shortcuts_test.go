@@ -39,9 +39,9 @@ func TestAllBound(t *testing.T) {
 
 	// shortcuts mirrors the a(sa{sv}) godbus decodes a ListShortcuts response into.
 	shortcuts := func(ids ...string) map[string]dbus.Variant {
-		entries := make([][]interface{}, 0, len(ids))
+		entries := make([][]any, 0, len(ids))
 		for _, id := range ids {
-			entries = append(entries, []interface{}{id, map[string]dbus.Variant{}})
+			entries = append(entries, []any{id, map[string]dbus.Variant{}})
 		}
 		return map[string]dbus.Variant{"shortcuts": dbus.MakeVariant(entries)}
 	}
