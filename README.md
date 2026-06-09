@@ -185,6 +185,11 @@ package — to keep the zero-CGO story intact.
 Always check `Available()` for the package you use and fall back to another
 method when it returns `false`.
 
+> Known issue: on GNOME 50 the shortcut bind dialog is rendered blank (no text)
+> due to an upstream regression in `xdg-desktop-portal-gnome`
+> ([#211](https://gitlab.gnome.org/GNOME/xdg-desktop-portal-gnome/-/issues/211)).
+> The dialog is still functional — confirming it binds the shortcuts as usual.
+
 ## License
 
 MIT © Asher Buk
