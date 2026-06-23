@@ -66,11 +66,10 @@ func (c *Conn) Call(iface, method string, args ...any) *dbus.Call {
 	return c.conn.Object(Dest, Path).Call(iface+"."+method, 0, args...)
 }
 
-// Register declares the app id to the portal so non-sandboxed apps are
-// identified before opening a session. GNOME's GlobalShortcuts backend rejects
-// an unidentified app, and consent dialogs use the id to resolve the app's
-// .desktop name and icon. No-op when appID is empty or the host Registry
-// interface is missing (older xdg-desktop-portal).
+// Register declares the app id so consent dialogs can resolve the app's name and
+// icon. It is best-effort: any error the portal answers with (interface absent,
+// app info not found) is swallowed so the session still opens; only transport
+// failures are returned. No-op when appID is empty.
 func (c *Conn) Register(appID string) error {
 	if appID == "" {
 		return nil
@@ -80,29 +79,14 @@ func (c *Conn) Register(appID string) error {
 	err := c.conn.Object(Dest, Path).
 		CallWithContext(ctx, registryIface+".Register", 0, appID, map[string]dbus.Variant{}).
 		Err
-	if isUnsupported(err) {
+	// A dbus.Error means the portal replied and declined (interface missing,
+	// app info not found, permission denied). Identity is advisory, so proceed.
+	// A non-dbus error is a transport failure the session calls would share.
+	var derr dbus.Error
+	if err == nil || errors.As(err, &derr) {
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("portal: register app id: %w", err)
-	}
-	return nil
-}
-
-// isUnsupported reports whether err means the portal lacks the Registry interface.
-func isUnsupported(err error) bool {
-	var derr dbus.Error
-	if !errors.As(err, &derr) {
-		return false
-	}
-	switch derr.Name {
-	case "org.freedesktop.DBus.Error.UnknownMethod",
-		"org.freedesktop.DBus.Error.UnknownInterface",
-		"org.freedesktop.DBus.Error.UnknownObject",
-		"org.freedesktop.DBus.Error.NotSupported":
-		return true
-	}
-	return false
+	return fmt.Errorf("portal: register app id: %w", err)
 }
 
 // Signals returns the channel receiving every signal on this connection. After
