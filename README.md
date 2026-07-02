@@ -102,6 +102,8 @@ func WithCallTimeout(d time.Duration) Option
 
 func (k *Keyboard) Type(text string) error
 func (k *Keyboard) Key(keysym int32, state KeyState) error // Pressed / Released
+func (k *Keyboard) Keycode(keycode Keycode, state KeyState) error
+func (k *Keyboard) KeyCombo(keycodes ...Keycode) error
 func (k *Keyboard) Close() error
 
 func RuneToKeysym(r rune) int32
@@ -112,6 +114,10 @@ func RuneToKeysym(r rune) int32
   across restarts.
 - `Type` maps Latin-1 runes 1:1 and other code points to the Unicode keysym
   range, so non-ASCII text works where the compositor supports it.
+- `Keycode`/`KeyCombo` call `NotifyKeyboardKeycode` with Linux input-event
+  keycodes. They are meant for physical-key shortcuts such as
+  `KeyCombo(KeycodeLeftCtrl, KeycodeV)` or
+  `KeyCombo(KeycodeLeftShift, KeycodeInsert)`.
 
 ## API (`shortcuts`)
 
