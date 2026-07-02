@@ -20,7 +20,8 @@ const (
 	persistToken   = uint32(2) // persist_mode: keep permission across restarts
 )
 
-// KeyState is the state of a key in a NotifyKeyboardKeysym call.
+// KeyState is the state of a key in a NotifyKeyboardKeysym or
+// NotifyKeyboardKeycode call.
 type KeyState uint32
 
 const (
@@ -28,6 +29,19 @@ const (
 	Released KeyState = 0
 	// Pressed is sent when a key is pressed.
 	Pressed KeyState = 1
+)
+
+// Keycode is a Linux input-event/evdev keyboard code for
+// NotifyKeyboardKeycode. It is useful for shortcuts whose physical keys matter,
+// such as paste, where a keysym may be layout-dependent.
+type Keycode int32
+
+// Common Linux input-event/evdev keycodes.
+const (
+	KeycodeLeftCtrl  Keycode = 29
+	KeycodeLeftShift Keycode = 42
+	KeycodeV         Keycode = 47
+	KeycodeInsert    Keycode = 110
 )
 
 // Available reports whether the RemoteDesktop portal exposes keyboard injection
@@ -126,6 +140,45 @@ func (k *Keyboard) Key(keysym int32, state KeyState) error {
 	return k.notify(keysym, state)
 }
 
+// Keycode presses or releases a single Linux input-event/evdev keycode through
+// NotifyKeyboardKeycode. Use it for physical-key shortcuts where a keysym would
+// depend on the active keyboard layout.
+func (k *Keyboard) Keycode(keycode Keycode, state KeyState) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if err := k.ensureSession(); err != nil {
+		return err
+	}
+	return k.notifyKeycode(keycode, state)
+}
+
+// KeyCombo presses all keycodes in order, then releases them in reverse order.
+// It is intended for shortcuts such as Ctrl+V or Shift+Insert.
+func (k *Keyboard) KeyCombo(keycodes ...Keycode) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if len(keycodes) == 0 {
+		return nil
+	}
+	if err := k.ensureSession(); err != nil {
+		return err
+	}
+	pressed := make([]Keycode, 0, len(keycodes))
+	for _, keycode := range keycodes {
+		if err := k.notifyKeycode(keycode, Pressed); err != nil {
+			k.releasePressed(pressed)
+			return err
+		}
+		pressed = append(pressed, keycode)
+	}
+	for i := len(pressed) - 1; i >= 0; i-- {
+		if err := k.notifyKeycode(pressed[i], Released); err != nil {
+			return k.releasePressedWithError(pressed[:i], err)
+		}
+	}
+	return nil
+}
+
 // Close ends the portal session and releases its connection.
 func (k *Keyboard) Close() error {
 	k.mu.Lock()
@@ -146,6 +199,30 @@ func (k *Keyboard) notify(keysym int32, state KeyState) error {
 		return fmt.Errorf("typing: notify keysym: %w", call.Err)
 	}
 	return nil
+}
+
+func (k *Keyboard) notifyKeycode(keycode Keycode, state KeyState) error {
+	call := k.conn.Call(portalRemote, "NotifyKeyboardKeycode",
+		k.session, map[string]dbus.Variant{}, int32(keycode), uint32(state))
+	if call.Err != nil {
+		return fmt.Errorf("typing: notify keycode: %w", call.Err)
+	}
+	return nil
+}
+
+func (k *Keyboard) releasePressed(pressed []Keycode) {
+	for i := len(pressed) - 1; i >= 0; i-- {
+		_ = k.notifyKeycode(pressed[i], Released)
+	}
+}
+
+func (k *Keyboard) releasePressedWithError(pressed []Keycode, firstErr error) error {
+	for i := len(pressed) - 1; i >= 0; i-- {
+		if err := k.notifyKeycode(pressed[i], Released); firstErr == nil && err != nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // ensureSession lazily creates, configures and starts the keyboard session.

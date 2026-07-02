@@ -18,6 +18,7 @@
 //		if err == nil {
 //			defer kbd.Close()
 //			_ = kbd.Type("hello")
+//			_ = kbd.KeyCombo(typing.KeycodeLeftCtrl, typing.KeycodeV)
 //		}
 //	}
 package typing
