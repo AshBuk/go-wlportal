@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Asher Buk
 // SPDX-License-Identifier: MIT
 
-// Command wlportal-type injects its arguments as keyboard input into the focused
-// window through the RemoteDesktop portal.
+// Command wlportal-typing injects its arguments as keyboard input into the
+// focused window through the RemoteDesktop portal.
 //
-//	go run ./examples/type "hello, world"
+//	go run ./examples/typing "hello, world"
 package main
 
 import (
@@ -18,7 +18,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: wlportal-type <text>")
+		fmt.Fprintln(os.Stderr, "usage: wlportal-typing <text>")
 		os.Exit(2)
 	}
 	if !typing.Available() {
@@ -28,7 +28,7 @@ func main() {
 
 	tokenPath := ""
 	if dir, err := os.UserConfigDir(); err == nil {
-		tokenPath = filepath.Join(dir, "wlportal-type", "token")
+		tokenPath = filepath.Join(dir, "wlportal-typing", "token")
 	}
 
 	kbd, err := typing.NewKeyboard(typing.WithRestoreTokenPath(tokenPath))

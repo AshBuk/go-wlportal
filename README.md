@@ -59,10 +59,10 @@ func main() {
 }
 ```
 
-A ready-to-run CLI lives in [`examples/type`](examples/type):
+A ready-to-run CLI lives in [`examples/typing`](examples/typing):
 
 ```bash
-go run ./examples/type "hello, world"
+go run ./examples/typing "hello, world"
 ```
 
 ### Global shortcuts
