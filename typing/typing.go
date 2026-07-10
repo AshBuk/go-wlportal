@@ -234,29 +234,31 @@ func (k *Keyboard) ensureSession() error {
 	if err != nil {
 		return err
 	}
-	k.conn = conn
 
 	// Declare the app id before CreateSession so the dialog can resolve the app.
-	if err := k.conn.Register(k.appID); err != nil {
+	if err := conn.Register(k.appID); err != nil {
+		_ = conn.Close()
 		return err
 	}
 
-	created, err := k.conn.Request(portalRemote, "CreateSession", func(token string) []any {
+	created, err := conn.Request(portalRemote, "CreateSession", func(token string) []any {
 		return []any{map[string]dbus.Variant{
 			"handle_token":         dbus.MakeVariant(token),
 			"session_handle_token": dbus.MakeVariant(token),
 		}}
 	})
 	if err != nil {
+		_ = conn.Close()
 		return err
 	}
 	handle, _ := created["session_handle"].Value().(string)
 	if handle == "" {
+		_ = conn.Close()
 		return fmt.Errorf("typing: empty session handle")
 	}
 	session := dbus.ObjectPath(handle)
 
-	if _, err := k.conn.Request(portalRemote, "SelectDevices", func(token string) []any {
+	if _, err := conn.Request(portalRemote, "SelectDevices", func(token string) []any {
 		opts := map[string]dbus.Variant{
 			"handle_token": dbus.MakeVariant(token),
 			"types":        dbus.MakeVariant(deviceKeyboard),
@@ -269,20 +271,23 @@ func (k *Keyboard) ensureSession() error {
 		}
 		return []any{session, opts}
 	}); err != nil {
+		_ = conn.Close()
 		return err
 	}
 
-	started, err := k.conn.Request(portalRemote, "Start", func(token string) []any {
+	started, err := conn.Request(portalRemote, "Start", func(token string) []any {
 		return []any{session, "", map[string]dbus.Variant{
 			"handle_token": dbus.MakeVariant(token),
 		}}
 	})
 	if err != nil {
+		_ = conn.Close()
 		return err
 	}
 	if t, ok := started["restore_token"].Value().(string); ok {
 		portal.SaveToken(k.tokenPath, t)
 	}
+	k.conn = conn
 	k.session = session
 	return nil
 }
