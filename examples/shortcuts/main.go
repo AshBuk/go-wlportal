@@ -24,7 +24,11 @@ func main() {
 
 	s, err := shortcuts.New([]shortcuts.Shortcut{
 		{ID: "demo", Description: "wlportal demo shortcut", PreferredTrigger: "<Ctrl><Alt>space"},
-	})
+	},
+		// GNOME rejects an unidentified app; in a real app this must match an
+		// installed .desktop file.
+		shortcuts.WithAppID("io.github.ashbuk.wlportal-shortcuts"),
+	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

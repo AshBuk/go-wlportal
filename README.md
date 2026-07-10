@@ -72,7 +72,11 @@ import "github.com/AshBuk/go-wlportal/shortcuts"
 
 s, err := shortcuts.New([]shortcuts.Shortcut{
 	{ID: "record", Description: "Start recording", PreferredTrigger: "<Ctrl><Alt>space"},
-})
+},
+	// GNOME rejects an unidentified app, so non-sandboxed apps must set an
+	// app id matching an installed .desktop file.
+	shortcuts.WithAppID("com.example.myapp"),
+)
 if err != nil {
 	log.Fatal(err)
 }
@@ -99,6 +103,7 @@ func Available() bool
 func NewKeyboard(opts ...Option) (*Keyboard, error)
 func WithRestoreTokenPath(path string) Option
 func WithCallTimeout(d time.Duration) Option
+func WithAppID(id string) Option
 
 func (k *Keyboard) Type(text string) error
 func (k *Keyboard) Key(keysym int32, state KeyState) error // Pressed / Released
@@ -109,9 +114,11 @@ func (k *Keyboard) Close() error
 func RuneToKeysym(r rune) int32
 ```
 
-- The portal session opens lazily on first `Type`/`Key` and may show a one-time
-  permission dialog. With `WithRestoreTokenPath` the dialog is shown only once
-  across restarts.
+- The portal session opens lazily on the first injection call (`Type`, `Key`,
+  `Keycode`, `KeyCombo`) and may show a one-time permission dialog. With
+  `WithRestoreTokenPath` the dialog is shown only once across restarts.
+- `WithAppID` declares the app id to the portal so the consent dialog shows the
+  app's name and icon; it should match an installed `.desktop` file.
 - `Type` maps Latin-1 runes 1:1 and other code points to the Unicode keysym
   range, so non-ASCII text works where the compositor supports it.
 - `Keycode`/`KeyCombo` call `NotifyKeyboardKeycode` with Linux input-event
@@ -126,6 +133,8 @@ func Available() bool
 
 func New(list []Shortcut, opts ...Option) (*Session, error)
 func WithCallTimeout(d time.Duration) Option
+func WithAppID(id string) Option
+func WithForceBind() Option
 
 func (s *Session) Events() <-chan Event // closed on Close
 func (s *Session) Close() error
@@ -139,6 +148,12 @@ type Event struct{ ID string; Pressed bool }
 - `PreferredTrigger` is a portal accelerator string (e.g. `<Ctrl><Alt>space`);
   empty lets the user choose the binding. Converting an app-specific hotkey
   format into this syntax is the caller's responsibility.
+- `WithAppID` declares the app id to the portal. GNOME's backend rejects an
+  unidentified app, so non-sandboxed apps must set it (sandboxed apps are
+  identified by the sandbox); it should match an installed `.desktop` file.
+- `WithForceBind` always shows the compositor's bind dialog, even when every
+  shortcut is already bound — use it for an explicit "reconfigure shortcuts"
+  action.
 
 ## Keyboard layout limitation
 
