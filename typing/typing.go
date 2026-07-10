@@ -31,19 +31,6 @@ const (
 	Pressed KeyState = 1
 )
 
-// Keycode is a Linux input-event/evdev keyboard code for
-// NotifyKeyboardKeycode. It is useful for shortcuts whose physical keys matter,
-// such as paste, where a keysym may be layout-dependent.
-type Keycode int32
-
-// Common Linux input-event/evdev keycodes.
-const (
-	KeycodeLeftCtrl  Keycode = 29
-	KeycodeLeftShift Keycode = 42
-	KeycodeV         Keycode = 47
-	KeycodeInsert    Keycode = 110
-)
-
 // Available reports whether the RemoteDesktop portal exposes keyboard injection
 // on the current session.
 func Available() bool {
@@ -163,20 +150,7 @@ func (k *Keyboard) KeyCombo(keycodes ...Keycode) error {
 	if err := k.ensureSession(); err != nil {
 		return err
 	}
-	pressed := make([]Keycode, 0, len(keycodes))
-	for _, keycode := range keycodes {
-		if err := k.notifyKeycode(keycode, Pressed); err != nil {
-			k.releasePressed(pressed)
-			return err
-		}
-		pressed = append(pressed, keycode)
-	}
-	for i := len(pressed) - 1; i >= 0; i-- {
-		if err := k.notifyKeycode(pressed[i], Released); err != nil {
-			return k.releasePressedWithError(pressed[:i], err)
-		}
-	}
-	return nil
+	return pressCombo(k.notifyKeycode, keycodes)
 }
 
 // Close ends the portal session and releases its connection.
@@ -208,21 +182,6 @@ func (k *Keyboard) notifyKeycode(keycode Keycode, state KeyState) error {
 		return fmt.Errorf("typing: notify keycode: %w", call.Err)
 	}
 	return nil
-}
-
-func (k *Keyboard) releasePressed(pressed []Keycode) {
-	for i := len(pressed) - 1; i >= 0; i-- {
-		_ = k.notifyKeycode(pressed[i], Released)
-	}
-}
-
-func (k *Keyboard) releasePressedWithError(pressed []Keycode, firstErr error) error {
-	for i := len(pressed) - 1; i >= 0; i-- {
-		if err := k.notifyKeycode(pressed[i], Released); firstErr == nil && err != nil {
-			firstErr = err
-		}
-	}
-	return firstErr
 }
 
 // ensureSession lazily creates, configures and starts the keyboard session.
