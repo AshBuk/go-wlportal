@@ -134,7 +134,7 @@ func Available() bool
 func New(list []Shortcut, opts ...Option) (*Session, error)
 func WithCallTimeout(d time.Duration) Option
 func WithAppID(id string) Option
-func WithForceBind() Option
+func WithForceBind() Option // Deprecated: New always binds the session
 
 func (s *Session) Events() <-chan Event // closed on Close
 func (s *Session) Close() error
@@ -151,9 +151,8 @@ type Event struct{ ID string; Pressed bool }
 - `WithAppID` declares the app id to the portal. GNOME's backend rejects an
   unidentified app, so non-sandboxed apps must set it (sandboxed apps are
   identified by the sandbox); it should match an installed `.desktop` file.
-- `WithForceBind` always shows the compositor's bind dialog, even when every
-  shortcut is already bound — use it for an explicit "reconfigure shortcuts"
-  action.
+- `WithForceBind` is deprecated and retained only for source compatibility;
+  `New` now binds the shortcuts for every newly created session.
 
 ## Keyboard layout limitation
 

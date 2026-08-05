@@ -43,9 +43,8 @@ func Available() bool {
 type Option func(*config)
 
 type config struct {
-	timeout   time.Duration
-	appID     string
-	forceBind bool
+	timeout time.Duration
+	appID   string
 }
 
 // WithCallTimeout sets how long to wait for each portal call to be answered.
@@ -61,12 +60,12 @@ func WithAppID(id string) Option {
 	return func(c *config) { c.appID = id }
 }
 
-// WithForceBind always calls BindShortcuts, showing the compositor's shortcut
-// dialog even when every shortcut is already bound. Use it for an explicit
-// "reconfigure shortcuts" action; normal startup should omit it to avoid
-// re-prompting a returning app.
+// WithForceBind is retained for source compatibility.
+//
+// Deprecated: New always calls BindShortcuts for the newly created session, as
+// required for the shortcuts to become active.
 func WithForceBind() Option {
-	return func(c *config) { c.forceBind = true }
+	return func(*config) {}
 }
 
 // Session is an open GlobalShortcuts portal session. Activations are delivered
@@ -143,29 +142,12 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 		}
 	}
 
-	// GlobalShortcuts has no restore_token; the portal persists bindings per
-	// application. After CreateSession, ListShortcuts silently (no dialog)
-	// returns the shortcuts bound in a previous run. Bind only when a requested
-	// shortcut is missing, so a returning app is not prompted again — while a
-	// new build that added a shortcut still triggers a (necessary) bind.
-	listed, err := conn.Request(portalShortcuts, "ListShortcuts", func(token string) []any {
-		return []any{s.handle, map[string]dbus.Variant{
-			"handle_token": dbus.MakeVariant(token),
-		}}
-	})
-	if err != nil {
+	// BindShortcuts activates the actions for this session. Persisted shortcut
+	// metadata may be available through ListShortcuts, but it does not make the
+	// actions active in a newly created session.
+	if err := bindShortcuts(conn, s.handle, list); err != nil {
 		_ = conn.Close()
 		return nil, err
-	}
-	if cfg.forceBind || !allBound(listed, list) {
-		if _, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []any {
-			return []any{s.handle, toPortal(list), "", map[string]dbus.Variant{
-				"handle_token": dbus.MakeVariant(token),
-			}}
-		}); err != nil {
-			_ = conn.Close()
-			return nil, err
-		}
 	}
 
 	s.wg.Add(1)
@@ -220,39 +202,17 @@ func (s *Session) listen() {
 	}
 }
 
-// boundIDs extracts the shortcut IDs from a ListShortcuts/BindShortcuts
-// response, whose "shortcuts" field is an a(sa{sv}) array of (id, metadata).
-func boundIDs(results map[string]dbus.Variant) map[string]bool {
-	ids := map[string]bool{}
-	v, ok := results["shortcuts"]
-	if !ok {
-		return ids
-	}
-	entries, ok := v.Value().([][]any)
-	if !ok {
-		return ids
-	}
-	for _, e := range entries {
-		if len(e) > 0 {
-			if id, ok := e[0].(string); ok && id != "" {
-				ids[id] = true
-			}
-		}
-	}
-	return ids
+type requester interface {
+	Request(iface, method string, build func(token string) []any) (map[string]dbus.Variant, error)
 }
 
-// allBound reports whether every requested shortcut is already bound according
-// to the portal's response, meaning no BindShortcuts call (and consent dialog)
-// is needed.
-func allBound(results map[string]dbus.Variant, want []Shortcut) bool {
-	have := boundIDs(results)
-	for _, sc := range want {
-		if !have[sc.ID] {
-			return false
-		}
-	}
-	return true
+func bindShortcuts(conn requester, handle dbus.ObjectPath, list []Shortcut) error {
+	_, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []any {
+		return []any{handle, toPortal(list), "", map[string]dbus.Variant{
+			"handle_token": dbus.MakeVariant(token),
+		}}
+	})
+	return err
 }
 
 func toPortal(list []Shortcut) []portalShortcut {

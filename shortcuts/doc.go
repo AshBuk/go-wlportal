@@ -10,9 +10,9 @@
 // some wlroots compositors expose it but require the binding to be set in their
 // own config. Call Available before use.
 //
-// Bindings persist across restarts: the portal remembers what an application
-// bound, so New reuses an existing grant via ListShortcuts and only shows the
-// consent dialog on first run or when a requested shortcut is not yet bound.
+// Bindings may persist across restarts, but every new session still calls
+// BindShortcuts so the compositor activates its actions. Returning applications
+// reuse the compositor's stored key assignments.
 //
 //	if shortcuts.Available() {
 //		s, err := shortcuts.New([]shortcuts.Shortcut{

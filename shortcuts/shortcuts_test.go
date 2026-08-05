@@ -4,6 +4,7 @@
 package shortcuts
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/godbus/dbus/v5"
@@ -34,25 +35,38 @@ func TestToPortal(t *testing.T) {
 	}
 }
 
-func TestAllBound(t *testing.T) {
-	want := []Shortcut{{ID: "a"}, {ID: "b"}}
+type recordingRequester struct {
+	iface  string
+	method string
+	args   []any
+}
 
-	// shortcuts mirrors the a(sa{sv}) godbus decodes a ListShortcuts response into.
-	shortcuts := func(ids ...string) map[string]dbus.Variant {
-		entries := make([][]any, 0, len(ids))
-		for _, id := range ids {
-			entries = append(entries, []any{id, map[string]dbus.Variant{}})
-		}
-		return map[string]dbus.Variant{"shortcuts": dbus.MakeVariant(entries)}
+func (r *recordingRequester) Request(iface, method string, build func(string) []any) (map[string]dbus.Variant, error) {
+	r.iface = iface
+	r.method = method
+	r.args = build("test-token")
+	return nil, nil
+}
+
+func TestBindShortcuts(t *testing.T) {
+	recorder := &recordingRequester{}
+	handle := dbus.ObjectPath("/org/freedesktop/portal/desktop/session/test")
+	list := []Shortcut{{ID: "record", Description: "Record", PreferredTrigger: "<Alt>r"}}
+
+	if err := bindShortcuts(recorder, handle, list); err != nil {
+		t.Fatalf("bindShortcuts: %v", err)
+	}
+	if recorder.iface != portalShortcuts || recorder.method != "BindShortcuts" {
+		t.Fatalf("request = %s.%s, want %s.BindShortcuts", recorder.iface, recorder.method, portalShortcuts)
 	}
 
-	if !allBound(shortcuts("a", "b"), want) {
-		t.Error("allBound = false, want true when every ID is already bound")
+	wantArgs := []any{
+		handle,
+		toPortal(list),
+		"",
+		map[string]dbus.Variant{"handle_token": dbus.MakeVariant("test-token")},
 	}
-	if allBound(shortcuts("a"), want) {
-		t.Error("allBound = true, want false when an ID is missing (app upgrade)")
-	}
-	if allBound(map[string]dbus.Variant{}, want) {
-		t.Error("allBound = true, want false when nothing is bound (first run)")
+	if !reflect.DeepEqual(recorder.args, wantArgs) {
+		t.Errorf("args = %#v, want %#v", recorder.args, wantArgs)
 	}
 }
