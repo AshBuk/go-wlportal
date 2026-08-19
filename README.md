@@ -89,10 +89,13 @@ for e := range s.Events() {
 }
 ```
 
-A ready-to-run CLI lives in [`examples/shortcuts`](examples/shortcuts):
+A ready-to-run CLI lives in [`examples/shortcuts`](examples/shortcuts). It also
+reports whether the backend supports `Configure`, and `-configure` opens the
+configuration UI:
 
 ```bash
 go run ./examples/shortcuts
+go run ./examples/shortcuts -configure
 ```
 
 ## API (`typing`)

@@ -5,9 +5,11 @@
 // activations until interrupted.
 //
 //	go run ./examples/shortcuts
+//	go run ./examples/shortcuts -configure
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -17,10 +19,14 @@ import (
 )
 
 func main() {
+	configure := flag.Bool("configure", false, "open the compositor's shortcut configuration UI")
+	flag.Parse()
+
 	if !shortcuts.Available() {
 		fmt.Fprintln(os.Stderr, "GlobalShortcuts portal not available on this session")
 		os.Exit(1)
 	}
+	fmt.Printf("ConfigureShortcuts supported: %t\n", shortcuts.Configurable())
 
 	s, err := shortcuts.New([]shortcuts.Shortcut{
 		{ID: "demo", Description: "wlportal demo shortcut", PreferredTrigger: "<Ctrl><Alt>space"},
@@ -34,6 +40,13 @@ func main() {
 		os.Exit(1)
 	}
 	defer s.Close()
+
+	if *configure {
+		// No window of our own, so the portal parents the UI to the compositor.
+		if err := s.Configure(""); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+	}
 
 	go func() {
 		for e := range s.Events() {
