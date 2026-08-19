@@ -118,6 +118,26 @@ func HasInterface(name string) bool {
 	return strings.Contains(data, name)
 }
 
+// Version reports the version of the named portal interface, or 0 when the
+// interface is absent or the property cannot be read. Like HasInterface it uses
+// a short timeout, since the portal may be activatable but not yet running.
+func Version(iface string) uint32 {
+	conn, err := dbus.SessionBus()
+	if err != nil {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var v dbus.Variant
+	if err := conn.Object(Dest, Path).
+		CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", 0, iface, "version").
+		Store(&v); err != nil {
+		return 0
+	}
+	n, _ := v.Value().(uint32)
+	return n
+}
+
 // Request invokes iface.method on the portal and blocks until the matching
 // org.freedesktop.portal.Request.Response signal arrives. build receives a
 // unique handle_token and returns the call arguments.

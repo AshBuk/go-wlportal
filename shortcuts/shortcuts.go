@@ -39,6 +39,13 @@ func Available() bool {
 	return portal.HasInterface("GlobalShortcuts")
 }
 
+// Configurable reports whether the backend implements ConfigureShortcuts, which
+// needs version 2 of the interface. Use it to hide a "reconfigure shortcuts"
+// action where Session.Configure would be rejected.
+func Configurable() bool {
+	return portal.Version(portalShortcuts) >= 2
+}
+
 // Option configures a Session.
 type Option func(*config)
 
@@ -160,7 +167,7 @@ func (s *Session) Events() <-chan Event { return s.events }
 // identifier, or "" when the app has none.
 //
 // It needs version 2 of the GlobalShortcuts interface; older backends answer
-// with an unknown-method error.
+// with an unknown-method error. Check Configurable to know in advance.
 func (s *Session) Configure(parentWindow string) error {
 	if err := s.conn.Call(portalShortcuts, "ConfigureShortcuts",
 		s.handle, parentWindow, map[string]dbus.Variant{}).Err; err != nil {

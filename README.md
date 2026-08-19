@@ -130,6 +130,7 @@ func RuneToKeysym(r rune) int32
 
 ```go
 func Available() bool
+func Configurable() bool
 
 func New(list []Shortcut, opts ...Option) (*Session, error)
 func WithCallTimeout(d time.Duration) Option
@@ -155,7 +156,8 @@ type Event struct{ ID string; Pressed bool }
   identified by the sandbox); it should match an installed `.desktop` file.
 - `Configure` opens the compositor's shortcut configuration UI, for an explicit
   "reconfigure shortcuts" action in the app. It needs version 2 of the portal
-  interface; older backends answer with an unknown-method error.
+  interface; older backends answer with an unknown-method error. `Configurable`
+  reports that up front, so the action can be hidden instead of failing on click.
 
 ## Keyboard layout limitation
 
