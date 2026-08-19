@@ -86,8 +86,9 @@ type portalShortcut struct {
 	Data map[string]dbus.Variant
 }
 
-// New opens a session and binds the given shortcuts in a single request, which
-// may show a one-time consent dialog. It returns once binding is confirmed.
+// New opens a session and binds the given shortcuts. Binding happens on every
+// session; backends show their consent dialog only for shortcuts the app has
+// not bound before. It returns once binding is confirmed.
 func New(list []Shortcut, opts ...Option) (*Session, error) {
 	if len(list) == 0 {
 		return nil, fmt.Errorf("shortcuts: no shortcuts to bind")
@@ -142,10 +143,13 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 		}
 	}
 
-	// BindShortcuts activates the actions for this session. Persisted shortcut
-	// metadata may be available through ListShortcuts, but it does not make the
-	// actions active in a newly created session.
-	if err := bindShortcuts(conn, s.handle, list); err != nil {
+	// BindShortcuts is what activates the actions. ListShortcuts may report
+	// persisted bindings, but they are inactive until this session binds them.
+	if _, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []any {
+		return []any{s.handle, toPortal(list), "", map[string]dbus.Variant{
+			"handle_token": dbus.MakeVariant(token),
+		}}
+	}); err != nil {
 		_ = conn.Close()
 		return nil, err
 	}
@@ -200,19 +204,6 @@ func (s *Session) listen() {
 			return
 		}
 	}
-}
-
-type requester interface {
-	Request(iface, method string, build func(token string) []any) (map[string]dbus.Variant, error)
-}
-
-func bindShortcuts(conn requester, handle dbus.ObjectPath, list []Shortcut) error {
-	_, err := conn.Request(portalShortcuts, "BindShortcuts", func(token string) []any {
-		return []any{handle, toPortal(list), "", map[string]dbus.Variant{
-			"handle_token": dbus.MakeVariant(token),
-		}}
-	})
-	return err
 }
 
 func toPortal(list []Shortcut) []portalShortcut {
