@@ -167,7 +167,10 @@ func (s *Session) Events() <-chan Event { return s.events }
 // identifier, or "" when the app has none.
 //
 // It needs version 2 of the GlobalShortcuts interface; older backends answer
-// with an unknown-method error. Check Configurable to know in advance.
+// with an unknown-method error. Check Configurable to know in advance: as of
+// xdg-desktop-portal 1.22 no backend we tested implements the method, so treat
+// the action as optional and expect users to reassign keys in their desktop's
+// own settings.
 func (s *Session) Configure(parentWindow string) error {
 	if err := s.conn.Call(portalShortcuts, "ConfigureShortcuts",
 		s.handle, parentWindow, map[string]dbus.Variant{}).Err; err != nil {

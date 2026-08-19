@@ -160,6 +160,9 @@ type Event struct{ ID string; Pressed bool }
   "reconfigure shortcuts" action in the app. It needs version 2 of the portal
   interface; older backends answer with an unknown-method error. `Configurable`
   reports that up front, so the action can be hidden instead of failing on click.
+  No backend we tested implements it yet — `xdg-desktop-portal-gnome` 50 and
+  `xdg-desktop-portal-hyprland` 1.4 both report version 1 and reject the call, so
+  users reassign keys in GNOME Settings, KDE System Settings or `hyprland.conf`.
 
 ## Keyboard layout limitation
 
