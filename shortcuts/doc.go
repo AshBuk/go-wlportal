@@ -12,7 +12,9 @@
 //
 // Bindings may persist across restarts, but every new session still calls
 // BindShortcuts so the compositor activates its actions. Returning applications
-// reuse the compositor's stored key assignments.
+// reuse the compositor's stored key assignments, so no consent dialog is shown
+// for shortcuts they already bound. Session.Configure opens that dialog on
+// demand.
 //
 //	if shortcuts.Available() {
 //		s, err := shortcuts.New([]shortcuts.Shortcut{

@@ -134,25 +134,28 @@ func Available() bool
 func New(list []Shortcut, opts ...Option) (*Session, error)
 func WithCallTimeout(d time.Duration) Option
 func WithAppID(id string) Option
-func WithForceBind() Option // Deprecated: New always binds the session
 
 func (s *Session) Events() <-chan Event // closed on Close
+func (s *Session) Configure(parentWindow string) error
 func (s *Session) Close() error
 
 type Shortcut struct{ ID, Description, PreferredTrigger string }
 type Event struct{ ID string; Pressed bool }
 ```
 
-- `New` opens the session and binds all shortcuts in one request (one consent
-  dialog), then delivers `Activated`/`Deactivated` as `Event`s on `Events()`.
+- `New` opens the session and binds all shortcuts in one request, then delivers
+  `Activated`/`Deactivated` as `Event`s on `Events()`. Binding happens on every
+  session; backends show their consent dialog only for shortcuts the app has not
+  bound before.
 - `PreferredTrigger` is a portal accelerator string (e.g. `<Ctrl><Alt>space`);
   empty lets the user choose the binding. Converting an app-specific hotkey
   format into this syntax is the caller's responsibility.
 - `WithAppID` declares the app id to the portal. GNOME's backend rejects an
   unidentified app, so non-sandboxed apps must set it (sandboxed apps are
   identified by the sandbox); it should match an installed `.desktop` file.
-- `WithForceBind` is deprecated and retained only for source compatibility;
-  `New` now binds the shortcuts for every newly created session.
+- `Configure` opens the compositor's shortcut configuration UI, for an explicit
+  "reconfigure shortcuts" action in the app. It needs version 2 of the portal
+  interface; older backends answer with an unknown-method error.
 
 ## Keyboard layout limitation
 

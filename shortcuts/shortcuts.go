@@ -60,14 +60,6 @@ func WithAppID(id string) Option {
 	return func(c *config) { c.appID = id }
 }
 
-// WithForceBind is retained for source compatibility.
-//
-// Deprecated: New always calls BindShortcuts for the newly created session, as
-// required for the shortcuts to become active.
-func WithForceBind() Option {
-	return func(*config) {}
-}
-
 // Session is an open GlobalShortcuts portal session. Activations are delivered
 // on Events until the session is closed.
 type Session struct {
@@ -162,6 +154,20 @@ func New(list []Shortcut, opts ...Option) (*Session, error) {
 // Events returns the channel of activation/deactivation events. It is closed
 // when the session is closed or the connection is lost.
 func (s *Session) Events() <-chan Event { return s.events }
+
+// Configure asks the portal to show its shortcut configuration UI for this
+// session, letting the user reassign the keys. parentWindow is an XDG window
+// identifier, or "" when the app has none.
+//
+// It needs version 2 of the GlobalShortcuts interface; older backends answer
+// with an unknown-method error.
+func (s *Session) Configure(parentWindow string) error {
+	if err := s.conn.Call(portalShortcuts, "ConfigureShortcuts",
+		s.handle, parentWindow, map[string]dbus.Variant{}).Err; err != nil {
+		return fmt.Errorf("shortcuts: configure: %w", err)
+	}
+	return nil
+}
 
 // Close ends the session and releases its connection.
 func (s *Session) Close() error {
