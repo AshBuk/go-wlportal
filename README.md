@@ -1,7 +1,6 @@
 # go-wlportal
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/AshBuk/go-wlportal.svg)](https://pkg.go.dev/github.com/AshBuk/go-wlportal)
-[![Go Report Card](https://goreportcard.com/badge/github.com/AshBuk/go-wlportal)](https://goreportcard.com/report/github.com/AshBuk/go-wlportal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Small, dependency-light Go bindings for XDG desktop portals that have no good
@@ -89,10 +88,13 @@ for e := range s.Events() {
 }
 ```
 
-A ready-to-run CLI lives in [`examples/shortcuts`](examples/shortcuts):
+A ready-to-run CLI lives in [`examples/shortcuts`](examples/shortcuts). It also
+reports whether the backend supports `Configure`, and `-configure` opens the
+configuration UI:
 
 ```bash
 go run ./examples/shortcuts
+go run ./examples/shortcuts -configure
 ```
 
 ## API (`typing`)
@@ -130,30 +132,34 @@ func RuneToKeysym(r rune) int32
 
 ```go
 func Available() bool
+func Configurable() bool
 
 func New(list []Shortcut, opts ...Option) (*Session, error)
 func WithCallTimeout(d time.Duration) Option
 func WithAppID(id string) Option
-func WithForceBind() Option
 
 func (s *Session) Events() <-chan Event // closed on Close
+func (s *Session) Configure(parentWindow string) error
 func (s *Session) Close() error
 
 type Shortcut struct{ ID, Description, PreferredTrigger string }
 type Event struct{ ID string; Pressed bool }
 ```
 
-- `New` opens the session and binds all shortcuts in one request (one consent
-  dialog), then delivers `Activated`/`Deactivated` as `Event`s on `Events()`.
+- `New` opens the session and binds all shortcuts in one request, then delivers
+  `Activated`/`Deactivated` as `Event`s on `Events()`. Binding happens on every
+  session; backends show their consent dialog only for shortcuts the app has not
+  bound before.
 - `PreferredTrigger` is a portal accelerator string (e.g. `<Ctrl><Alt>space`);
   empty lets the user choose the binding. Converting an app-specific hotkey
   format into this syntax is the caller's responsibility.
 - `WithAppID` declares the app id to the portal. GNOME's backend rejects an
   unidentified app, so non-sandboxed apps must set it (sandboxed apps are
   identified by the sandbox); it should match an installed `.desktop` file.
-- `WithForceBind` always shows the compositor's bind dialog, even when every
-  shortcut is already bound — use it for an explicit "reconfigure shortcuts"
-  action.
+- `Configure` opens the compositor's shortcut configuration UI, for an explicit
+  "reconfigure shortcuts" action in the app. It needs version 2 of the portal
+  interface; older backends answer with an unknown-method error. `Configurable`
+  reports that up front, so the action can be hidden instead of failing on click.
 
 ## Keyboard layout limitation
 
