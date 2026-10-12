@@ -119,6 +119,10 @@ func RuneToKeysym(r rune) int32
 - The portal session opens lazily on the first injection call (`Type`, `Key`,
   `Keycode`, `KeyCombo`) and may show a one-time permission dialog. With
   `WithRestoreTokenPath` the dialog is shown only once across restarts.
+- When the portal closes the session (the user stops remote control, the portal
+  restarts), the next call fails and drops it. A call that failed before
+  injecting any key is retried once on a fresh session; otherwise the error is
+  returned and the following call opens a new session.
 - `WithAppID` declares the app id to the portal so the consent dialog shows the
   app's name and icon; it should match an installed `.desktop` file.
 - `Type` maps Latin-1 runes 1:1 and other code points to the Unicode keysym

@@ -82,6 +82,7 @@ type Keyboard struct {
 	mu      sync.Mutex
 	conn    *portal.Conn
 	session dbus.ObjectPath
+	sent    bool // a key was injected during the current call
 }
 
 // NewKeyboard creates a keyboard injector. It returns an error when the
@@ -101,19 +102,18 @@ func NewKeyboard(opts ...Option) (*Keyboard, error) {
 func (k *Keyboard) Type(text string) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if err := k.ensureSession(); err != nil {
-		return err
-	}
-	for _, r := range text {
-		keysym := RuneToKeysym(r)
-		if err := k.notify(keysym, Pressed); err != nil {
-			return err
+	return k.inject(func() error {
+		for _, r := range text {
+			keysym := RuneToKeysym(r)
+			if err := k.notify(keysym, Pressed); err != nil {
+				return err
+			}
+			if err := k.notify(keysym, Released); err != nil {
+				return err
+			}
 		}
-		if err := k.notify(keysym, Released); err != nil {
-			return err
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // Key presses or releases a single X11 keysym. Use it for modifiers or control
@@ -121,10 +121,7 @@ func (k *Keyboard) Type(text string) error {
 func (k *Keyboard) Key(keysym int32, state KeyState) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if err := k.ensureSession(); err != nil {
-		return err
-	}
-	return k.notify(keysym, state)
+	return k.inject(func() error { return k.notify(keysym, state) })
 }
 
 // Keycode presses or releases a single Linux input-event/evdev keycode through
@@ -133,10 +130,7 @@ func (k *Keyboard) Key(keysym int32, state KeyState) error {
 func (k *Keyboard) Keycode(keycode Keycode, state KeyState) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if err := k.ensureSession(); err != nil {
-		return err
-	}
-	return k.notifyKeycode(keycode, state)
+	return k.inject(func() error { return k.notifyKeycode(keycode, state) })
 }
 
 // KeyCombo presses all keycodes in order, then releases them in reverse order.
@@ -147,16 +141,18 @@ func (k *Keyboard) KeyCombo(keycodes ...Keycode) error {
 	if len(keycodes) == 0 {
 		return nil
 	}
-	if err := k.ensureSession(); err != nil {
-		return err
-	}
-	return pressCombo(k.notifyKeycode, keycodes)
+	return k.inject(func() error { return pressCombo(k.notifyKeycode, keycodes) })
 }
 
 // Close ends the portal session and releases its connection.
 func (k *Keyboard) Close() error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	return k.drop()
+}
+
+// drop ends the session and releases its connection; the next call opens a new one.
+func (k *Keyboard) drop() error {
 	if k.conn == nil {
 		return nil
 	}
@@ -166,12 +162,43 @@ func (k *Keyboard) Close() error {
 	return err
 }
 
+// inject runs fn on an open session. A session the portal has closed (remote
+// control stopped by the user, portal restarted) fails every call, so a failed
+// session is dropped instead of being reused.
+func (k *Keyboard) inject(fn func() error) error {
+	return retryOnce(k.ensureSession, func() { _ = k.drop() }, func() (bool, error) {
+		k.sent = false
+		err := fn()
+		return k.sent, err
+	})
+}
+
+// retryOnce opens a session and runs fn. When fn fails, the session is dropped,
+// and if fn sent no key yet it is retried once on a fresh session: retrying
+// after a partial send would inject the sent keys twice.
+func retryOnce(open func() error, drop func(), fn func() (sent bool, err error)) error {
+	for retried := false; ; retried = true {
+		if err := open(); err != nil {
+			return err
+		}
+		sent, err := fn()
+		if err == nil {
+			return nil
+		}
+		drop()
+		if sent || retried {
+			return err
+		}
+	}
+}
+
 func (k *Keyboard) notify(keysym int32, state KeyState) error {
 	call := k.conn.Call(portalRemote, "NotifyKeyboardKeysym",
 		k.session, map[string]dbus.Variant{}, keysym, uint32(state))
 	if call.Err != nil {
 		return fmt.Errorf("typing: notify keysym: %w", call.Err)
 	}
+	k.sent = true
 	return nil
 }
 
@@ -181,6 +208,7 @@ func (k *Keyboard) notifyKeycode(keycode Keycode, state KeyState) error {
 	if call.Err != nil {
 		return fmt.Errorf("typing: notify keycode: %w", call.Err)
 	}
+	k.sent = true
 	return nil
 }
 
